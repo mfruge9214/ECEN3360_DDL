@@ -8,8 +8,6 @@
 //***********************************************************************************
 
 
-
-
 //***********************************************************************************
 // global variables
 //***********************************************************************************
@@ -20,28 +18,37 @@
 //***********************************************************************************
 void cmu_init(void){
 
-		uint32_t	temp_freq;
+	CMU_ClockSelectSet(cmuClock_HFPER, cmuSelect_HFXO);
+	CMU_ClockEnable(cmuClock_HFPER, true);
 
-		CMU_ClockSelectSet(cmuClock_HFPER, cmuSelect_HFXO);
-		CMU_ClockEnable(cmuClock_HFPER, true);
+	// Enable the HFPERCLK for desired peripherals such as ADC
+	CMU_ClockSelectSet(cmuClock_HFPER, cmuSelect_HFXO);
+	CMU_ClockEnable(cmuClock_HFPER, true);
 
-		// By default, LFRCO is enabled
-		CMU_OscillatorEnable(cmuOsc_LFRCO, false, false);	// using LFXO or ULFRCO
 
-		// Route LF clock to the LF clock tree
+	// By default, LFRCO is enabled
+	CMU_OscillatorEnable(cmuOsc_LFRCO, false, false);	// using LFXO or ULFRCO
 
-		CMU_OscillatorEnable(cmuOsc_ULFRCO, false, false); // Change these to true for EC
-		CMU_OscillatorEnable(cmuOsc_LFXO, true, true);		// Disable LFXO (Changed to false for EC)
+	// Route LF clock to the LF clock tree
+	if (Letimer0_EM == EM4) {
+		CMU_OscillatorEnable(cmuOsc_ULFRCO, true, true);
+		CMU_OscillatorEnable(cmuOsc_LFXO, false, false);		// Disable LFXO
+		CMU_ClockSelectSet(cmuClock_LFA, cmuSelect_ULFRCO);	// Use ULFRCO in EM3 for LETIMER0
+	}
+	else {
+		CMU_OscillatorEnable(cmuOsc_ULFRCO, false, false);
+		CMU_OscillatorEnable(cmuOsc_LFXO, true, true);		// Disable LFXO
 		CMU_ClockSelectSet(cmuClock_LFA, cmuSelect_LFXO);	// routing clock to LFA
+	}
 
-		//CMU->LFAPRESC0 = PRESCALAR;
+	CMU_ClockEnable(cmuClock_HFPER, true);
+	CMU_ClockEnable(cmuClock_CORELE, true);
 
 
-		CMU_ClockEnable(cmuClock_LFA, true);
-		CMU_ClockEnable(cmuClock_CORELE, true);
-
-		// Peripheral clocks enabled
-		CMU_ClockEnable(cmuClock_GPIO, true);
-		CMU_ClockEnable(cmuClock_LETIMER0, true);
+	// Peripheral clocks enabled
+	CMU_ClockEnable(cmuClock_GPIO, true);
+	CMU_ClockEnable(cmuClock_LETIMER0, true);
+	CMU_ClockEnable(cmuClock_I2C0, true);
 
 }
+
