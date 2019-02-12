@@ -17,7 +17,6 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include <em_letimer.h>
 #include "em_device.h"
 #include "em_chip.h"
 #include "em_cmu.h"
@@ -27,11 +26,14 @@
 #include "gpio.h"
 #include "cmu.h"
 #include "letimer.h"
-#include "emu.h"
+#include "i2c.h"
 
 
 int main(void)
 {
+  /* initialized variables */
+  Sleep_Block_Mode(EM2); 	// set lowest energy mode for the system
+
   EMU_DCDCInit_TypeDef dcdcInit = EMU_DCDCINIT_DEFAULT;
   CMU_HFXOInit_TypeDef hfxoInit = CMU_HFXOINIT_DEFAULT;
 
@@ -39,7 +41,11 @@ int main(void)
   CHIP_Init();
 
   /* Init DCDC regulator and HFXO with kit specific parameters */
+  /* Initialize DCDC. Always start in low-noise mode. */
+  EMU_EM23Init_TypeDef em23Init = EMU_EM23INIT_DEFAULT;
   EMU_DCDCInit(&dcdcInit);
+  em23Init.vScaleEM23Voltage = emuVScaleEM23_LowPower;
+  EMU_EM23Init(&em23Init);
   CMU_HFXOInit(&hfxoInit);
 
   /* Switch HFCLK to HFXO and disable HFRCO */
@@ -52,24 +58,21 @@ int main(void)
   /* Initialize GPIO */
   gpio_init();
 
-  // Initialize LETIMER
+  /* Initialize LETIMER0 */
   letimer0_init();
+
+  // Initialize i2c0
+  i2c0_init();
+
   LETIMER_Enable(LETIMER0, true);
+  I2C_Enable(I2C0, true);
 
-  // Configure the Energy Mode of Operation
-  blockSleepMode(EM2);
+  // enable interrupts after chip has been configured
+  CORE_ATOMIC_IRQ_ENABLE();
 
 
-
-
-  /* Infinite blink loop */
   while (1) {
-	 sleep(); // Used to implement interrupts
-
-	//for (int i = 0; i < 1500000; i++);
-		//GPIO_PinOutClear(LED1_port, LED1_pin);
-
-	//for (int i = 0; i < 2500000; i++);
-		//GPIO_PinOutSet(LED1_port, LED1_pin);
+	  //Enter_Sleep();
+	  read_I2C();
   }
 }
