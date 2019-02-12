@@ -1,82 +1,108 @@
-// Includes
+////***********************************************************************************
+//// Include files
+////***********************************************************************************
+//#include "letimer.h"
+//
+////***********************************************************************************
+//// defined files
+////***********************************************************************************
+//
+//
+////***********************************************************************************
+//// global variables
+////***********************************************************************************
+//
+//
+////***********************************************************************************
+//// function prototypes
+////***********************************************************************************
 
 
-
+//***********************************************************************************
+// Include files
+//***********************************************************************************
 #include "letimer.h"
 
+//***********************************************************************************
+// defined files
+//***********************************************************************************
 
 
-// Global Vars
+//***********************************************************************************
+// global variables
+//***********************************************************************************
 
 
+//***********************************************************************************
+// function prototypes
+//***********************************************************************************
+void letimer0_init(void){
+	unsigned int	seconds_ticks, on_ticks;
+	unsigned int	letimer0_tick_seconds;
+	unsigned int	pres_cal, effective_pres_cal;
 
-// Functions
-void letimer0_init()
-{
-	//uint32_t vcomp0= LFXO_PRESCALAR*LETIMER0_PERIOD;
-	//uint32_t vcomp1=vcomp0-(LFXO_PRESCALAR*LED_ON_TIME);
-	uint32_t vcomp0, vcomp1, eff_freq, prescalar;
-	vcomp0= LFXO_FREQ*LETIMER0_PERIOD;
-	eff_freq=LFXO_FREQ;
-	prescalar=1;
-	while(vcomp0/MAXCOUNT)
-	{
-		prescalar=prescalar<<1;
-		eff_freq=eff_freq>>1;
-		vcomp0=eff_freq*LETIMER0_PERIOD;
+	LETIMER_Init_TypeDef letimer0_values;
+
+	if (Letimer0_EM == EM4) letimer0_tick_seconds = Letimer0_EM3_Ticks;
+	else letimer0_tick_seconds = Letimer0_Std_Ticks;
+
+	// second ticks required before prescaling
+	seconds_ticks = Letimer0_Period * letimer0_tick_seconds - 1;	// minus 1 due to count starts from 0 and not 1
+
+	pres_cal = 0;
+	effective_pres_cal = 1;
+	while ((seconds_ticks / Letimer0_16bit_Ticks) > 0){
+		pres_cal++;
+		letimer0_tick_seconds = letimer0_tick_seconds >> 1;
+		seconds_ticks = Letimer0_Period * letimer0_tick_seconds - 1;	// minus 1 due to count starts from 0 and not 1
+		effective_pres_cal = effective_pres_cal << 1;
 	}
-	if(prescalar!=1)
-	{
-		CMU_ClockPrescSet(cmuClock_LETIMER0, prescalar);
-	}
-	vcomp1=vcomp0-(eff_freq*LED_ON_TIME);
+
+	on_ticks = seconds_ticks - (Letimer0_On_Time * letimer0_tick_seconds) / 1000;  //Adjust for milli-seconds
+
+	if (effective_pres_cal > 1) CMU_ClockPrescSet(cmuClock_LETIMER0, effective_pres_cal);
+
+	// Initialize LETIMER0
+	letimer0_values.bufTop = false;			// Comp1 will not be used to load comp0, but used to create an on-time/duty cycle
+	letimer0_values.comp0Top = true;		// load comp0 into cnt register when count register underflows enabling continuous looping
+	letimer0_values.debugRun = false;		// disable stop letimer0 during debug to assist in debugging
+	letimer0_values.enable = false;			// will enable after set up is complete
+	letimer0_values.out0Pol = 0;			// Not outputting any value
+	letimer0_values.out1Pol = 0;			// Not outputting any value
+	letimer0_values.repMode = letimerRepeatFree;	// Set up Letimer0 for free running for continuous looping
+	letimer0_values.ufoa0 = letimerUFOANone;		// No action of outputs on underflow
+	letimer0_values.ufoa1 = letimerUFOANone;		// No action of outputs on underflow
+
+	LETIMER_Init(LETIMER0, &letimer0_values);		// Initialize LETIMER0
+
+	LETIMER_CompareSet(LETIMER0, 0, seconds_ticks);				// load comp0 register
+	LETIMER_CompareSet(LETIMER0, 1, on_ticks);					// load comp1 register
+
+	LETIMER0->IFC = LETIMER_IFC_COMP0 | LETIMER_IFC_COMP1;	// clear any residual interrupt
+	LETIMER0->IEN = LETIMER_IEN_COMP0 | LETIMER_IEN_COMP1;	// enable interrupts at the peripheral
+
+	Sleep_Block_Mode(Letimer0_EM);			// Set lowest sleep mode setting for LETIMER0
+
+	NVIC_EnableIRQ(LETIMER0_IRQn);				// Enable the peripheral interrupt at the core
 
 
-
-	// Initialize values for LETIMER type Def
-	LETIMER_Init_TypeDef init;
-
-	init.enable=false;			/* Enable timer when initialization completes. */
-	init.debugRun=false;		/* Stop counter during debug halt. */
-	init.comp0Top=true;			/* load COMP0 into CNT on underflow. */
-	init.bufTop=false;         /**< Load COMP1 into COMP0 when REP0 reaches 0. */
-	init.out0Pol=false;        /**< Idle value for output 0. */
-	init.out1Pol=false;        /**< Idle value for output 1. */
-	init.ufoa0=letimerUFOANone;          /**< Underflow output 0 action. */
-	init.ufoa1=letimerUFOANone;          /**< Underflow output 1 action. */
-	init.repMode=letimerRepeatFree;        /**< Repeat mode. */
-	init.topValue=0;       /**< Top value. Counter wraps when top value matches counter value is reached. */
-
-	// Call the init function
-	LETIMER_Init(LETIMER0, &init);
-
-	// Calculate and load the values of seconds_ticks and on_ticks into comp0 and comp1
-	LETIMER_CompareSet(LETIMER0, 0, vcomp0);
-	LETIMER_CompareSet(LETIMER0, 1, vcomp1);
-
-	// Clear and enable the interrupts
-
-	LETIMER0->IFC =LETIMER_IFC_COMP0 | LETIMER_IFC_COMP1;
-	LETIMER0->IEN |=LETIMER_IEN_COMP0 | LETIMER_IEN_COMP1;
-
-	//blockSleepMode(LETIMER0_EM_MIN);
-
-	NVIC_EnableIRQ(LETIMER0_IRQn);
 }
 
 void LETIMER0_IRQHandler(void){
-	uint32_t int_flag;
-	int_flag=LETIMER0->IF;
-	LETIMER0->IFC=int_flag;
-	if(int_flag & LETIMER_IF_COMP0)
-	{
+	unsigned int int_flag;
+
+	CORE_ATOMIC_IRQ_DISABLE	();		// prevent nesting of interrupts for initial interrupt handling
+	int_flag = LETIMER0->IF;		// store cause of interrupt
+	LETIMER0->IFC = int_flag;		// clear cause  of interrupt
+
+	if ((int_flag & LETIMER_IFC_COMP1 ) != false) {
+		GPIO_PinOutClear(LED0_port, LED0_pin);
+	}
+	if ((int_flag & LETIMER_IFC_COMP0) != false) {
 		GPIO_PinOutSet(LED0_port, LED0_pin);
 	}
 
-	if(int_flag & LETIMER_IF_COMP1)
-	{
-		GPIO_PinOutClear(LED0_port, LED0_pin);
-	}
+	CORE_ATOMIC_IRQ_ENABLE();		// re-enabling interrupts
 }
 
 
